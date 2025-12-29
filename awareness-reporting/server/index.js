@@ -17,14 +17,118 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Test database connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('❌ Database connection error:', err);
+// Test database connection and auto-initialize schema
+async function initializeDatabaseSchema() {
+  try {
+    // Test connection
+    const testResult = await pool.query('SELECT NOW()');
+    console.log('✅ Database connected:', testResult.rows[0].now);
+    
+    // Check if tables exist
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'users'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.log('🔧 Creating database tables...');
+      
+      // Create all tables (from schema.sql)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'organizer', 'team_member')),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS invitations (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) NOT NULL,
+          role VARCHAR(50) NOT NULL CHECK (role IN ('admin', 'organizer', 'team_member')),
+          token VARCHAR(255) UNIQUE NOT NULL,
+          invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS events (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          date DATE NOT NULL,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          retention_days INTEGER,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS shifts (
+          id SERIAL PRIMARY KEY,
+          event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          start_time TIME NOT NULL,
+          end_time TIME NOT NULL,
+          location VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS shift_assignments (
+          id SERIAL PRIMARY KEY,
+          shift_id INTEGER NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(shift_id, user_id)
+        );
+        
+        CREATE TABLE IF NOT EXISTS reports (
+          id SERIAL PRIMARY KEY,
+          event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          shift_id INTEGER NOT NULL REFERENCES shifts(id) ON DELETE CASCADE,
+          submitted_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          incident_type VARCHAR(100) NOT NULL,
+          severity VARCHAR(50) NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+          description TEXT NOT NULL,
+          location VARCHAR(255),
+          witnesses TEXT,
+          actions_taken TEXT,
+          has_pii BOOLEAN DEFAULT FALSE,
+          pii_detected_types TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS gdpr_settings (
+          id SERIAL PRIMARY KEY,
+          default_retention_days INTEGER NOT NULL DEFAULT 90,
+          invitation_expiration_hours INTEGER NOT NULL DEFAULT 72,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        INSERT INTO gdpr_settings (default_retention_days, invitation_expiration_hours) 
+        VALUES (90, 72) ON CONFLICT DO NOTHING;
+        
+        CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
+        CREATE INDEX IF NOT EXISTS idx_shifts_event_id ON shifts(event_id);
+        CREATE INDEX IF NOT EXISTS idx_shift_assignments_shift_id ON shift_assignments(shift_id);
+        CREATE INDEX IF NOT EXISTS idx_shift_assignments_user_id ON shift_assignments(user_id);
+        CREATE INDEX IF NOT EXISTS idx_reports_event_id ON reports(event_id);
+        CREATE INDEX IF NOT EXISTS idx_reports_shift_id ON reports(shift_id);
+        CREATE INDEX IF NOT EXISTS idx_reports_submitted_by ON reports(submitted_by);
+        CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
+        CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
+      `);
+      
+      console.log('✅ Database tables created successfully');
+    }
+    
+  } catch (error) {
+    console.error('❌ Database initialization error:', error);
     process.exit(1);
   }
-  console.log('✅ Database connected:', res.rows[0].now);
-});
+}
 
 // Middleware
 app.use(cors({
@@ -33,7 +137,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Initialize database with test data (only in development)
+// Seed test data (only in development)
 async function initializeDatabase() {
   if (process.env.NODE_ENV === 'production') {
     console.log('Production mode - skipping test data seed');
@@ -548,10 +652,12 @@ app.put('/api/gdpr/settings', async (req, res) => {
 });
 
 // Initialize and start server
-initializeDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔗 CORS enabled for: ${FRONTEND_URL}`);
+initializeDatabaseSchema().then(() => {
+  initializeDatabase().then(() => {
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🔗 CORS enabled for: ${FRONTEND_URL}`);
+    });
   });
 });

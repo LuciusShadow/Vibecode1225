@@ -14,6 +14,7 @@ services:
     env: node
     region: frankfurt
     plan: free
+    rootDir: awareness-reporting
     buildCommand: npm install
     startCommand: node server/index.js
     envVars:
