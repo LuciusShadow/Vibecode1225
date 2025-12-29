@@ -17,7 +17,10 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
 // PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl:
+    process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 // Test database connection and auto-initialize schema
@@ -26,7 +29,7 @@ async function initializeDatabaseSchema() {
     // Test connection
     const testResult = await pool.query('SELECT NOW()');
     console.log('✅ Database connected:', testResult.rows[0].now);
-    
+
     // Check if tables exist
     const tableCheck = await pool.query(`
       SELECT EXISTS (
@@ -34,10 +37,10 @@ async function initializeDatabaseSchema() {
         WHERE table_name = 'users'
       );
     `);
-    
+
     if (!tableCheck.rows[0].exists) {
       console.log('🔧 Creating database tables...');
-      
+
       // Create all tables (from schema.sql)
       await pool.query(`
         CREATE TABLE IF NOT EXISTS users (
@@ -123,10 +126,9 @@ async function initializeDatabaseSchema() {
         CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
         CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
       `);
-      
+
       console.log('✅ Database tables created successfully');
     }
-    
   } catch (error) {
     console.error('❌ Database initialization error:', error);
     process.exit(1);
@@ -134,10 +136,12 @@ async function initializeDatabaseSchema() {
 }
 
 // Middleware
-app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: FRONTEND_URL,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Seed test data (seeds if database is empty, regardless of environment)
@@ -151,7 +155,7 @@ async function initializeDatabase() {
     }
 
     console.log('🌱 Seeding test data (database is empty)...');
-    
+
     // Insert test users
     const users = [
       ['admin@club.com', 'password123', 'Admin User', 'admin'],
@@ -165,7 +169,7 @@ async function initializeDatabase() {
       ['morgan.member@club.com', 'password123', 'Morgan Davis', 'team_member'],
       ['riley.member@club.com', 'password123', 'Riley Anderson', 'team_member'],
       ['sam.member@club.com', 'password123', 'Sam Wilson', 'team_member'],
-      ['avery.member@club.com', 'password123', 'Avery Moore', 'team_member']
+      ['avery.member@club.com', 'password123', 'Avery Moore', 'team_member'],
     ];
 
     for (const [email, password, name, role] of users) {
@@ -189,7 +193,9 @@ function generateToken() {
 // Helper function to clean expired invitations
 async function cleanExpiredInvitations() {
   try {
-    await pool.query('DELETE FROM invitations WHERE expires_at < NOW() AND used = false');
+    await pool.query(
+      'DELETE FROM invitations WHERE expires_at < NOW() AND used = false'
+    );
   } catch (error) {
     console.error('Error cleaning expired invitations:', error);
   }
@@ -205,7 +211,9 @@ async function cleanOldReports() {
         AND (e.date + INTERVAL '1 day' * COALESCE(e.retention_days, g.default_retention_days)) < CURRENT_DATE
     `);
     if (result.rowCount > 0) {
-      console.log(`🗑️  Cleaned ${result.rowCount} old reports based on retention policy`);
+      console.log(
+        `🗑️  Cleaned ${result.rowCount} old reports based on retention policy`
+      );
     }
   } catch (error) {
     console.error('Error cleaning old reports:', error);
@@ -227,18 +235,18 @@ app.get('/health', (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  
+
   try {
     const result = await pool.query(
       'SELECT * FROM users WHERE email = $1 AND password = $2',
       [email, password]
     );
-    
+
     const user = result.rows[0];
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
+
     const token = generateToken();
     res.json({ user, token });
   } catch (error) {
@@ -252,7 +260,7 @@ app.get('/api/auth/me', async (req, res) => {
   if (!authHeader) {
     return res.status(401).json({ error: 'No authorization header' });
   }
-  
+
   // In production, validate the token properly
   // For now, we'll just return a user based on a simple check
   res.json({ user: null });
@@ -300,22 +308,25 @@ app.get('/api/users/team-members', async (req, res) => {
 
 app.post('/api/invitations', async (req, res) => {
   const { email, role, invitedBy } = req.body;
-  
+
   try {
     await cleanExpiredInvitations();
-    
+
     // Get invitation expiration hours from GDPR settings
-    const gdprResult = await pool.query('SELECT invitation_expiration_hours FROM gdpr_settings LIMIT 1');
-    const expirationHours = gdprResult.rows[0]?.invitation_expiration_hours || 72;
-    
+    const gdprResult = await pool.query(
+      'SELECT invitation_expiration_hours FROM gdpr_settings LIMIT 1'
+    );
+    const expirationHours =
+      gdprResult.rows[0]?.invitation_expiration_hours || 72;
+
     const token = generateToken();
     const expiresAt = new Date(Date.now() + expirationHours * 60 * 60 * 1000);
-    
+
     const result = await pool.query(
       'INSERT INTO invitations (email, role, token, invited_by, expires_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [email, role, token, invitedBy, expiresAt]
     );
-    
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating invitation:', error);
@@ -326,7 +337,7 @@ app.post('/api/invitations', async (req, res) => {
 app.get('/api/invitations', async (req, res) => {
   try {
     await cleanExpiredInvitations();
-    
+
     const result = await pool.query(`
       SELECT i.*, u.name as invited_by_name
       FROM invitations i
@@ -334,7 +345,7 @@ app.get('/api/invitations', async (req, res) => {
       WHERE i.used = false AND i.expires_at > NOW()
       ORDER BY i.created_at DESC
     `);
-    
+
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching invitations:', error);
@@ -344,18 +355,18 @@ app.get('/api/invitations', async (req, res) => {
 
 app.get('/api/invitations/:token', async (req, res) => {
   const { token } = req.params;
-  
+
   try {
     const result = await pool.query(
       'SELECT * FROM invitations WHERE token = $1 AND used = false AND expires_at > NOW()',
       [token]
     );
-    
+
     const invitation = result.rows[0];
     if (!invitation) {
       return res.status(404).json({ error: 'Invalid or expired invitation' });
     }
-    
+
     res.json(invitation);
   } catch (error) {
     console.error('Error fetching invitation:', error);
@@ -366,37 +377,42 @@ app.get('/api/invitations/:token', async (req, res) => {
 app.post('/api/invitations/:token/accept', async (req, res) => {
   const { token } = req.params;
   const { name, password } = req.body;
-  
+
   try {
     // Get invitation
     const invResult = await pool.query(
       'SELECT * FROM invitations WHERE token = $1 AND used = false AND expires_at > NOW()',
       [token]
     );
-    
+
     const invitation = invResult.rows[0];
     if (!invitation) {
       return res.status(404).json({ error: 'Invalid or expired invitation' });
     }
-    
+
     // Check if user already exists
-    const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [invitation.email]);
+    const existingUser = await pool.query(
+      'SELECT * FROM users WHERE email = $1',
+      [invitation.email]
+    );
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ error: 'User already exists' });
     }
-    
+
     // Create user
     const userResult = await pool.query(
       'INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, $4) RETURNING *',
       [invitation.email, password, name, invitation.role]
     );
-    
+
     // Mark invitation as used
-    await pool.query('UPDATE invitations SET used = true WHERE token = $1', [token]);
-    
+    await pool.query('UPDATE invitations SET used = true WHERE token = $1', [
+      token,
+    ]);
+
     const user = userResult.rows[0];
     const authToken = generateToken();
-    
+
     res.status(201).json({ user, token: authToken });
   } catch (error) {
     console.error('Error accepting invitation:', error);
@@ -409,14 +425,31 @@ app.post('/api/invitations/:token/accept', async (req, res) => {
 app.get('/api/events', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT e.*, u.name as created_by_name,
-        (SELECT COUNT(*) FROM shifts WHERE event_id = e.id) as shift_count
+      SELECT e.id, e.name, e.date, e.created_by as organizer_id, 
+             e.retention_days, e.created_at,
+             u.name as organizer_name,
+             (SELECT COUNT(*) FROM shifts WHERE event_id = e.id) as shift_count,
+             COALESCE(
+               (SELECT default_retention_days FROM gdpr_settings LIMIT 1),
+               90
+             ) as default_retention
       FROM events e
       LEFT JOIN users u ON e.created_by = u.id
       ORDER BY e.date DESC
     `);
-    
-    res.json(result.rows);
+
+    // Transform to match Event interface
+    const events = result.rows.map((row) => ({
+      id: row.id.toString(),
+      name: row.name,
+      date: row.date,
+      organizerId: row.organizer_id ? row.organizer_id.toString() : '',
+      organizerName: row.organizer_name || 'Unknown',
+      retentionDays: row.retention_days || row.default_retention,
+      createdAt: row.created_at,
+    }));
+
+    res.json(events);
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
@@ -425,37 +458,41 @@ app.get('/api/events', async (req, res) => {
 
 app.get('/api/events/:id', async (req, res) => {
   const { id } = req.params;
-  
+
   try {
-    const eventResult = await pool.query(`
-      SELECT e.*, u.name as created_by_name
+    const eventResult = await pool.query(
+      `
+      SELECT e.id, e.name, e.date, e.created_by as organizer_id, 
+             e.retention_days, e.created_at,
+             u.name as organizer_name,
+             COALESCE(
+               (SELECT default_retention_days FROM gdpr_settings LIMIT 1),
+               90
+             ) as default_retention
       FROM events e
       LEFT JOIN users u ON e.created_by = u.id
       WHERE e.id = $1
-    `, [id]);
-    
+    `,
+      [id]
+    );
+
     const event = eventResult.rows[0];
     if (!event) {
       return res.status(404).json({ error: 'Event not found' });
     }
-    
-    // Get shifts for this event
-    const shiftsResult = await pool.query(`
-      SELECT s.*,
-        json_agg(
-          json_build_object('id', u.id, 'name', u.name, 'email', u.email)
-        ) FILTER (WHERE u.id IS NOT NULL) as assigned_members
-      FROM shifts s
-      LEFT JOIN shift_assignments sa ON s.id = sa.shift_id
-      LEFT JOIN users u ON sa.user_id = u.id
-      WHERE s.event_id = $1
-      GROUP BY s.id
-      ORDER BY s.start_time
-    `, [id]);
-    
-    event.shifts = shiftsResult.rows;
-    
-    res.json(event);
+
+    // Transform to match Event interface
+    const response = {
+      id: event.id.toString(),
+      name: event.name,
+      date: event.date,
+      organizerId: event.organizer_id ? event.organizer_id.toString() : '',
+      organizerName: event.organizer_name || 'Unknown',
+      retentionDays: event.retention_days || event.default_retention,
+      createdAt: event.created_at,
+    };
+
+    res.json(response);
   } catch (error) {
     console.error('Error fetching event:', error);
     res.status(500).json({ error: 'Failed to fetch event' });
@@ -463,15 +500,40 @@ app.get('/api/events/:id', async (req, res) => {
 });
 
 app.post('/api/events', async (req, res) => {
-  const { name, date, createdBy, retentionDays } = req.body;
-  
+  const { name, date, organizerId, retentionDays } = req.body;
+
   try {
+    // Get the organizer's name and default retention
+    const userResult = await pool.query(
+      'SELECT name FROM users WHERE id = $1',
+      [organizerId]
+    );
+    const gdprResult = await pool.query(
+      'SELECT default_retention_days FROM gdpr_settings LIMIT 1'
+    );
+
+    const organizerName = userResult.rows[0]?.name || 'Unknown';
+    const defaultRetention = gdprResult.rows[0]?.default_retention_days || 90;
+
     const result = await pool.query(
       'INSERT INTO events (name, date, created_by, retention_days) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, date, createdBy, retentionDays || null]
+      [name, date, organizerId, retentionDays || null]
     );
-    
-    res.status(201).json(result.rows[0]);
+
+    const event = result.rows[0];
+
+    // Transform to match Event interface
+    const response = {
+      id: event.id.toString(),
+      name: event.name,
+      date: event.date,
+      organizerId: event.created_by.toString(),
+      organizerName: organizerName,
+      retentionDays: event.retention_days || defaultRetention,
+      createdAt: event.created_at,
+    };
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Error creating event:', error);
     res.status(500).json({ error: 'Failed to create event' });
@@ -480,29 +542,87 @@ app.post('/api/events', async (req, res) => {
 
 // ============= Shift Routes =============
 
+// Get all shifts for an event
+app.get('/api/events/:eventId/shifts', async (req, res) => {
+  const { eventId } = req.params;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT s.id, s.event_id, s.name, s.start_time, s.end_time, s.location, s.created_at,
+        COALESCE(
+          json_agg(
+            CAST(sa.user_id AS TEXT)
+          ) FILTER (WHERE sa.user_id IS NOT NULL),
+          '[]'
+        ) as team_members
+      FROM shifts s
+      LEFT JOIN shift_assignments sa ON s.id = sa.shift_id
+      WHERE s.event_id = $1
+      GROUP BY s.id
+      ORDER BY s.start_time, s.name
+    `,
+      [eventId]
+    );
+
+    // Transform the result to match the expected Shift interface
+    const shifts = result.rows.map((row) => ({
+      id: row.id.toString(),
+      eventId: row.event_id.toString(),
+      name: row.name,
+      teamMembers: row.team_members || [],
+      startTime: row.start_time,
+      endTime: row.end_time,
+      createdAt: row.created_at,
+    }));
+
+    res.json(shifts);
+  } catch (error) {
+    console.error('Error fetching shifts:', error);
+    res.status(500).json({ error: 'Failed to fetch shifts' });
+  }
+});
+
 app.post('/api/shifts', async (req, res) => {
-  const { eventId, name, startTime, endTime, location, assignedMembers } = req.body;
-  
+  const { eventId, name, startTime, endTime, location, teamMembers } = req.body;
+
   try {
     // Create shift
     const shiftResult = await pool.query(
       'INSERT INTO shifts (event_id, name, start_time, end_time, location) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [eventId, name, startTime, endTime, location]
+      [
+        eventId,
+        name,
+        startTime || '00:00',
+        endTime || '23:59',
+        location || null,
+      ]
     );
-    
+
     const shift = shiftResult.rows[0];
-    
+
     // Assign members
-    if (assignedMembers && assignedMembers.length > 0) {
-      for (const memberId of assignedMembers) {
+    if (teamMembers && teamMembers.length > 0) {
+      for (const memberId of teamMembers) {
         await pool.query(
           'INSERT INTO shift_assignments (shift_id, user_id) VALUES ($1, $2)',
           [shift.id, memberId]
         );
       }
     }
-    
-    res.status(201).json(shift);
+
+    // Return shift in expected format
+    const result = {
+      id: shift.id.toString(),
+      eventId: shift.event_id.toString(),
+      name: shift.name,
+      teamMembers: teamMembers || [],
+      startTime: shift.start_time,
+      endTime: shift.end_time,
+      createdAt: shift.created_at,
+    };
+
+    res.status(201).json(result);
   } catch (error) {
     console.error('Error creating shift:', error);
     res.status(500).json({ error: 'Failed to create shift' });
@@ -511,9 +631,10 @@ app.post('/api/shifts', async (req, res) => {
 
 app.get('/api/shifts/:id', async (req, res) => {
   const { id } = req.params;
-  
+
   try {
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT s.*,
         json_agg(
           json_build_object('id', u.id, 'name', u.name, 'email', u.email)
@@ -523,13 +644,15 @@ app.get('/api/shifts/:id', async (req, res) => {
       LEFT JOIN users u ON sa.user_id = u.id
       WHERE s.id = $1
       GROUP BY s.id
-    `, [id]);
-    
+    `,
+      [id]
+    );
+
     const shift = result.rows[0];
     if (!shift) {
       return res.status(404).json({ error: 'Shift not found' });
     }
-    
+
     res.json(shift);
   } catch (error) {
     console.error('Error fetching shift:', error);
@@ -541,7 +664,7 @@ app.get('/api/shifts/:id', async (req, res) => {
 
 app.get('/api/reports', async (req, res) => {
   const { eventId } = req.query;
-  
+
   try {
     let query = `
       SELECT r.*, 
@@ -553,15 +676,15 @@ app.get('/api/reports', async (req, res) => {
       JOIN shifts s ON r.shift_id = s.id
       JOIN users u ON r.submitted_by = u.id
     `;
-    
+
     const params = [];
     if (eventId) {
       query += ' WHERE r.event_id = $1';
       params.push(eventId);
     }
-    
+
     query += ' ORDER BY r.created_at DESC';
-    
+
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
@@ -582,32 +705,40 @@ app.post('/api/reports', async (req, res) => {
     witnesses,
     actionsTaken,
     hasPII,
-    piiDetectedTypes
+    piiDetectedTypes,
   } = req.body;
-  
+
   try {
     // Verify the user is assigned to this shift
     const assignmentCheck = await pool.query(
       'SELECT * FROM shift_assignments WHERE shift_id = $1 AND user_id = $2',
       [shiftId, submittedBy]
     );
-    
+
     if (assignmentCheck.rows.length === 0) {
       return res.status(403).json({ error: 'User not assigned to this shift' });
     }
-    
+
     const result = await pool.query(
       `INSERT INTO reports (
         event_id, shift_id, submitted_by, incident_type, severity,
         description, location, witnesses, actions_taken, has_pii, pii_detected_types
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
-        eventId, shiftId, submittedBy, incidentType, severity,
-        description, location, witnesses, actionsTaken, hasPII,
-        piiDetectedTypes ? JSON.stringify(piiDetectedTypes) : null
+        eventId,
+        shiftId,
+        submittedBy,
+        incidentType,
+        severity,
+        description,
+        location,
+        witnesses,
+        actionsTaken,
+        hasPII,
+        piiDetectedTypes ? JSON.stringify(piiDetectedTypes) : null,
       ]
     );
-    
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating report:', error);
@@ -620,7 +751,12 @@ app.post('/api/reports', async (req, res) => {
 app.get('/api/gdpr/settings', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM gdpr_settings LIMIT 1');
-    res.json(result.rows[0] || { default_retention_days: 90, invitation_expiration_hours: 72 });
+    res.json(
+      result.rows[0] || {
+        default_retention_days: 90,
+        invitation_expiration_hours: 72,
+      }
+    );
   } catch (error) {
     console.error('Error fetching GDPR settings:', error);
     res.status(500).json({ error: 'Failed to fetch GDPR settings' });
@@ -629,10 +765,11 @@ app.get('/api/gdpr/settings', async (req, res) => {
 
 app.put('/api/gdpr/settings', async (req, res) => {
   const { defaultRetentionDays, invitationExpirationHours } = req.body;
-  
+
   try {
     // Upsert GDPR settings
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO gdpr_settings (id, default_retention_days, invitation_expiration_hours, updated_at)
       VALUES (1, $1, $2, NOW())
       ON CONFLICT (id) DO UPDATE
@@ -640,8 +777,10 @@ app.put('/api/gdpr/settings', async (req, res) => {
           invitation_expiration_hours = $2,
           updated_at = NOW()
       RETURNING *
-    `, [defaultRetentionDays, invitationExpirationHours]);
-    
+    `,
+      [defaultRetentionDays, invitationExpirationHours]
+    );
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating GDPR settings:', error);
