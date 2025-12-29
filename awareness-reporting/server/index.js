@@ -223,10 +223,22 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint to check users
+app.get('/api/debug/users', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, email, name, role FROM users');
+    res.json({ count: result.rows.length, users: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============= Authentication Routes =============
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
+  
+  console.log('🔐 Login attempt:', { email, password: password ? '***' : 'missing' });
   
   try {
     const result = await pool.query(
@@ -234,8 +246,11 @@ app.post('/api/auth/login', async (req, res) => {
       [email, password]
     );
     
+    console.log('👤 Query result:', result.rows.length, 'users found');
+    
     const user = result.rows[0];
     if (!user) {
+      console.log('❌ No user found with those credentials');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
