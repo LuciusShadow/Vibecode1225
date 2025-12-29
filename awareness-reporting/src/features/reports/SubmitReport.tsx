@@ -66,7 +66,7 @@ export function SubmitReport() {
 
       setSelectedShift(shiftParam);
       setIsLoading(false);
-    }).catch(err => {
+    }).catch(() => {
       setError('Failed to load event details.');
       setIsLoading(false);
     });

@@ -7,7 +7,7 @@ import { Button, Card, Input } from '../../components/ui';
 export function AdminPanel() {
   const { user } = useAuth();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [gdprSettings, setGdprSettings] = useState<GDPRSettings | null>(null);
+  const [_gdprSettings, setGdprSettings] = useState<GDPRSettings | null>(null);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'organizer' | 'team_member'>('team_member');
   const [isLoading, setIsLoading] = useState(false);
