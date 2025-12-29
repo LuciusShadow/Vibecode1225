@@ -241,6 +241,15 @@ app.post('/api/auth/login', async (req, res) => {
   console.log('🔐 Login attempt:', { email, password: password ? '***' : 'missing' });
   
   try {
+    // First, check if user exists at all
+    const userCheck = await pool.query('SELECT email, password FROM users WHERE email = $1', [email]);
+    console.log('👤 User exists:', userCheck.rows.length > 0);
+    if (userCheck.rows.length > 0) {
+      console.log('📝 Stored password:', userCheck.rows[0].password);
+      console.log('🔑 Provided password:', password);
+      console.log('✅ Match:', userCheck.rows[0].password === password);
+    }
+    
     const result = await pool.query(
       'SELECT * FROM users WHERE email = $1 AND password = $2',
       [email, password]
