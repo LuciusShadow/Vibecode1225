@@ -87,9 +87,9 @@ export function LoginForm() {
           <div className="bg-gray-50 rounded-lg p-4 space-y-2">
             <p className="text-xs font-semibold text-gray-700 mb-2">Test Accounts:</p>
             <div className="space-y-1 text-xs text-gray-600">
-              <p><span className="font-medium">Admin:</span> admin@club.com / admin123</p>
-              <p><span className="font-medium">Organizer:</span> sarah.organizer@club.com / organizer123</p>
-              <p><span className="font-medium">Team Member:</span> alex.member@club.com / team123</p>
+              <p><span className="font-medium">Admin:</span> admin@club.com / password123</p>
+              <p><span className="font-medium">Organizer:</span> sarah.organizer@club.com / password123</p>
+              <p><span className="font-medium">Team Member:</span> alex.member@club.com / password123</p>
             </div>
           </div>
         </form>
