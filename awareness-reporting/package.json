@@ -6,10 +6,17 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
+    "server:inmemory": "node server/index-inmemory.js",
     "dev:all": "npm run server & npm run dev",
+    "start": "./start.sh",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:init": "psql $DATABASE_URL -f server/schema.sql",
+    "db:seed": "psql $DATABASE_URL -f server/seed.sql",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f postgres"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

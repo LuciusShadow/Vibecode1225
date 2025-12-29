@@ -27,6 +27,61 @@ A GDPR-compliant web application for club awareness teams to manage events, shif
 - PII detection warnings before submission
 - Clear data access controls
 
+## Quick Start
+
+### With Docker (Recommended)
+
+```bash
+# Install dependencies
+npm install
+
+# Start everything (PostgreSQL + Backend + Frontend)
+npm start
+```
+
+### Manual Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Start PostgreSQL
+npm run docker:up
+
+# Start backend and frontend
+npm run dev:all
+```
+
+### Test with In-Memory Database
+
+```bash
+# Backend only (no PostgreSQL needed)
+npm run server:inmemory
+
+# In another terminal
+npm run dev
+```
+
+The app will run on:
+- Frontend: http://localhost:5174
+- Backend: http://localhost:3001
+
+## Test Users
+
+**Admin:**
+- Email: `admin@club.com`
+- Password: `password123`
+
+**Organizers:**
+- `sarah.organizer@club.com` / `password123`
+- `mike.organizer@club.com` / `password123`
+- `emma.organizer@club.com` / `password123`
+
+**Team Members:**
+- `alex.member@club.com` / `password123`
+- `jordan.member@club.com` / `password123`
+- And 6 more team members
+
 ## Technology Stack
 
 ### Frontend

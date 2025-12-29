@@ -1,0 +1,13 @@
+# Build settings
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Redirect all requests to index.html for client-side routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Environment variables (set these in Netlify dashboard)
+# VITE_API_URL will be set in the Netlify UI
