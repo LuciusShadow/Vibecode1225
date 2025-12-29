@@ -4,7 +4,10 @@ import crypto from 'crypto';
 import pg from 'pg';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Only load .env in development (Render provides env vars directly)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 const { Pool } = pg;
 const app = express();
@@ -137,13 +140,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Seed test data (only in development)
+// Seed test data (seeds if database is empty, regardless of environment)
 async function initializeDatabase() {
-  if (process.env.NODE_ENV === 'production') {
-    console.log('Production mode - skipping test data seed');
-    return;
-  }
-
   try {
     // Check if users already exist
     const result = await pool.query('SELECT COUNT(*) FROM users');
@@ -152,7 +150,7 @@ async function initializeDatabase() {
       return;
     }
 
-    console.log('🌱 Seeding test data...');
+    console.log('🌱 Seeding test data (database is empty)...');
     
     // Insert test users
     const users = [
